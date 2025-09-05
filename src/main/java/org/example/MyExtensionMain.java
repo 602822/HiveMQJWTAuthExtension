@@ -7,6 +7,8 @@ import com.hivemq.extension.sdk.api.services.Services;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.MalformedURLException;
+
 public class MyExtensionMain implements ExtensionMain {
 
     private static final @NotNull Logger log = LoggerFactory.getLogger(MyExtensionMain.class);
@@ -15,20 +17,23 @@ public class MyExtensionMain implements ExtensionMain {
     @Override
     public void extensionStart(@NotNull ExtensionStartInput extensionStartInput, @NotNull ExtensionStartOutput extensionStartOutput) {
 
+        final ExtensionInformation extensionInformation = extensionStartInput.getExtensionInformation();
+
         try {
-            registerAuthenticatorProvider();
-            final ExtensionInformation extensionInformation = extensionStartInput.getExtensionInformation();
+            MyAuthenticatorProvider myAuthenticatorProvider = new MyAuthenticatorProvider();
+            Services.securityRegistry().setAuthenticatorProvider(myAuthenticatorProvider);
+            log.info("MyAuthenticatorProvider registered successfully.");
             log.info("Started: {}:{}", extensionInformation.getName(), extensionInformation.getVersion());
+        } catch (MalformedURLException e) {
+            log.error("Invalid JWKS URL, extension startup aborted.", e);
+            extensionStartOutput.preventExtensionStartup("Invalid JWKS URL: " + e.getMessage());
+
         } catch (Exception e) {
-            log.error("Failed to start extension", e);
+            log.error("Unexpected error during extension startup", e);
+            extensionStartOutput.preventExtensionStartup("Unexpected error: " + e.getMessage());
         }
     }
 
-    private static void registerAuthenticatorProvider() {
-        MyAuthenticatorProvider myAuthenticatorProvider = new MyAuthenticatorProvider(new MyAuthenticator());
-        Services.securityRegistry().setAuthenticatorProvider(myAuthenticatorProvider);
-        log.info("MyAuthenticatorProvider registered successfully.");
-    }
 
     @Override
     public void extensionStop(@NotNull ExtensionStopInput extensionStopInput, @NotNull ExtensionStopOutput extensionStopOutput) {
