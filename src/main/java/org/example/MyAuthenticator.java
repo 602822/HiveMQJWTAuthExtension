@@ -18,13 +18,21 @@ import com.nimbusds.jwt.SignedJWT;
 import com.nimbusds.jwt.proc.ConfigurableJWTProcessor;
 import com.nimbusds.jwt.proc.DefaultJWTClaimsVerifier;
 import com.nimbusds.jwt.proc.DefaultJWTProcessor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.text.ParseException;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 
 public class MyAuthenticator implements SimpleAuthenticator {
+
+    private static final Logger log = LoggerFactory.getLogger(MyAuthenticator.class);
 
     //Replace with Keycloak realm's JWKS URL
     private static final String JWKS_URL = "https://<keycloak-host>/realms/<realm>/protocol/openid-connect/certs";
@@ -32,12 +40,8 @@ public class MyAuthenticator implements SimpleAuthenticator {
     //Replace with Keycloak realm's issuer Url
     private static final String EXPECTED_ISSUER = "https://<keycloak-host>/realms/<realm>";
 
-    //the audience claim i expect for MQTT (who the token is intended for
-    private static final String EXPECTED_AUDIENCE = "mqtt-broker"; //temporary
-
-//The scopes I expect the client to have
-    private static final String REQUIRED_SCOPE = "mqtt:connect"; //temporary
-
+    //the audience claim i expect for MQTT (who the token is intended for)
+    private static final String EXPECTED_AUDIENCE = "hivemq-smartocean-testbroker";
 
     private final ConfigurableJWTProcessor<SecurityContext> jwtProcessor;
 
@@ -73,7 +77,8 @@ public class MyAuthenticator implements SimpleAuthenticator {
     @Override
     public void onConnect(@NotNull SimpleAuthInput simpleAuthInput, @NotNull SimpleAuthOutput simpleAuthOutput) {
         ConnectPacket connectPacket = simpleAuthInput.getConnectPacket();
-        if (connectPacket.getPassword().isPresent()) {
+
+        if (connectPacket.getPassword().isEmpty()) {
             simpleAuthOutput.failAuthentication();
         }
 
@@ -87,28 +92,56 @@ public class MyAuthenticator implements SimpleAuthenticator {
             JWTClaimsSet claims = jwtProcessor.process(signedJWT, null);
 
 
-            if(!claims.getAudience().contains(EXPECTED_AUDIENCE)) {
-                System.err.println("Invalid audience: " + claims.getAudience());
+            if (!claims.getAudience().contains(EXPECTED_AUDIENCE)) {
+                log.error("Invalid audience: {}", claims.getAudience());
                 simpleAuthOutput.failAuthentication();
                 return;
             }
 
-            if(claims.getStringListClaim("scp") == null || !claims.getStringListClaim("scp").contains(REQUIRED_SCOPE)) {
-                System.err.println("Missing required scope:" + REQUIRED_SCOPE);
+
+            Map<String, Object> resourceAccess = (Map<String, Object>) claims.getClaim("resource_access"); //confirm
+
+
+            String mqttClientId = connectPacket.getClientId();
+            log.info("Authenticating clientId: {}", mqttClientId);
+
+            if (resourceAccess == null || !resourceAccess.containsKey(mqttClientId)) {
+                log.error("No resource access for mqtt-client");
                 simpleAuthOutput.failAuthentication();
                 return;
             }
+
+            Map<String, Object> clientRoles = (Map<String, Object>) resourceAccess.get(mqttClientId);
+            List<String> roles = (List<String>) clientRoles.get("roles");
+            log.info("Roles for {}: {}", mqttClientId, roles);
+
+            if (roles == null || !clientRoles.containsKey("roles")) {
+                log.error("No roles assigned to client: {}", mqttClientId);
+                simpleAuthOutput.failAuthentication();
+                return;
+            }
+
+            if (!roles.contains("mqtt:connect")) {
+                log.error("Missing mqtt:connect role");
+                simpleAuthOutput.failAuthentication();
+                return;
+            }
+
+            //Storing the roles in the connection attribute store for later use in the authorizer
+            String rolesString = String.join(",", roles);
+            ByteBuffer rolesBuffer = ByteBuffer.wrap(rolesString.getBytes(StandardCharset.UTF_8));
+            simpleAuthInput.getConnectionInformation().getConnectionAttributeStore().put("roles", rolesBuffer);
 
 
             //token is valid
-            System.out.println("Authenticated user: " + claims.getSubject());
+            log.info("Authenticated user: {}", claims.getSubject());
             simpleAuthOutput.authenticateSuccessfully();
 
         } catch (ParseException | BadJOSEException e) {
-            System.err.println("JWT validation failed: " + e.getMessage());
+            log.error("JWT validation failed: {}", e.getMessage());
             simpleAuthOutput.failAuthentication();
         } catch (JOSEException e) {
-            System.err.println("JWT processing error: " + e.getMessage());
+            log.error("JWT processing error: {}", e.getMessage());
             simpleAuthOutput.failAuthentication();
         }
     }

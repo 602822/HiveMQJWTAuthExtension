@@ -21,8 +21,13 @@ public class MyExtensionMain implements ExtensionMain {
 
         try {
             MyAuthenticatorProvider myAuthenticatorProvider = new MyAuthenticatorProvider();
+            MyAuthorizerProvider myAuthorizerProvider = new MyAuthorizerProvider();
             Services.securityRegistry().setAuthenticatorProvider(myAuthenticatorProvider);
+            Services.securityRegistry().setAuthorizerProvider(myAuthorizerProvider);
+
+
             log.info("MyAuthenticatorProvider registered successfully.");
+            log.info("MyAuthorizerProvider registered successfully.");
             log.info("Started: {}:{}", extensionInformation.getName(), extensionInformation.getVersion());
         } catch (MalformedURLException e) {
             log.error("Invalid JWKS URL, extension startup aborted.", e);
