@@ -40,8 +40,6 @@ public class MyAuthenticator implements SimpleAuthenticator {
     //Replace with Keycloak realm's issuer Url
     private static final String EXPECTED_ISSUER = "https://<keycloak-host>/realms/<realm>";
 
-    //the audience claim i expect for MQTT (who the token is intended for)
-    private static final String EXPECTED_AUDIENCE = "hivemq-smartocean-testbroker";
 
     private final ConfigurableJWTProcessor<SecurityContext> jwtProcessor;
 
@@ -83,6 +81,10 @@ public class MyAuthenticator implements SimpleAuthenticator {
         }
 
         try {
+
+            String mqttClientId = connectPacket.getClientId();
+            log.info("Authenticating client: {} ", mqttClientId);
+
             String jwtString = StandardCharset.UTF_8
                     .decode(connectPacket.getPassword().get())
                     .toString();
@@ -92,37 +94,26 @@ public class MyAuthenticator implements SimpleAuthenticator {
             JWTClaimsSet claims = jwtProcessor.process(signedJWT, null);
 
 
-            if (!claims.getAudience().contains(EXPECTED_AUDIENCE)) {
-                log.error("Invalid audience: {}", claims.getAudience());
+            Map<String, Object> realmAccess = (Map<String, Object>) claims.getClaim("realm_access");
+
+
+            if (realmAccess == null) {
+                log.error("No realm-access claim found for client: {}", mqttClientId);
                 simpleAuthOutput.failAuthentication();
                 return;
             }
 
+            List<String> roles = (List<String>) realmAccess.get("roles");
+            log.info("Roles for {}: {} ", mqttClientId, roles);
 
-            Map<String, Object> resourceAccess = (Map<String, Object>) claims.getClaim("resource_access"); //confirm
-
-
-            String mqttClientId = connectPacket.getClientId();
-            log.info("Authenticating clientId: {}", mqttClientId);
-
-            if (resourceAccess == null || !resourceAccess.containsKey(mqttClientId)) {
-                log.error("No resource access for mqtt-client");
-                simpleAuthOutput.failAuthentication();
-                return;
-            }
-
-            Map<String, Object> clientRoles = (Map<String, Object>) resourceAccess.get(mqttClientId);
-            List<String> roles = (List<String>) clientRoles.get("roles");
-            log.info("Roles for {}: {}", mqttClientId, roles);
-
-            if (roles == null || !clientRoles.containsKey("roles")) {
-                log.error("No roles assigned to client: {}", mqttClientId);
+            if (roles == null || !realmAccess.containsKey("roles")) {
+                log.error("No roles assigned to {}", mqttClientId);
                 simpleAuthOutput.failAuthentication();
                 return;
             }
 
             if (!roles.contains("mqtt:connect")) {
-                log.error("Missing mqtt:connect role");
+                log.error("Missing mqtt:connect role for {}", mqttClientId);
                 simpleAuthOutput.failAuthentication();
                 return;
             }
