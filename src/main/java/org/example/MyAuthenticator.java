@@ -25,20 +25,24 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.text.ParseException;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class MyAuthenticator implements SimpleAuthenticator {
 
     private static final Logger log = LoggerFactory.getLogger(MyAuthenticator.class);
 
-    //Replace with Keycloak realm's JWKS URL
-    private static final String JWKS_URL = "https://<keycloak-host>/realms/<realm>/protocol/openid-connect/certs";
+    //Only for testing
+    private static final String JWKS_URL = "http://localhost:8080/realms/smartocean-testrealm/protocol/openid-connect/certs";
 
-    //Replace with Keycloak realm's issuer Url
-    private static final String EXPECTED_ISSUER = "https://<keycloak-host>/realms/<realm>";
+    //Only for testing
+    private static final String EXPECTED_ISSUER = "http://localhost:8080/realms/smartocean-testrealm";
+
+    private static final String CLAIM_LOCATION = "location";
+    private static final String CLAIM_PROVIDER = "provider";
+    private static final String CLAIM_ALLOWED_TOPICS = "allowed_topics";
+
+    //who the token is intended/issued for
+    private static final String EXPECTED_AUDIENCE = "hivemq-smartocean-testbroker";
 
 
     private final ConfigurableJWTProcessor<SecurityContext> jwtProcessor;
@@ -54,20 +58,27 @@ public class MyAuthenticator implements SimpleAuthenticator {
         JWSKeySelector<SecurityContext> keySelector = new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, keySource);
         jwtProcessor.setJWSKeySelector(keySelector);
 
+        JWTClaimsSet exactMatchClaims = new JWTClaimsSet.Builder()
+                .issuer(EXPECTED_ISSUER)
+                .audience(EXPECTED_AUDIENCE)
+                .build();
+
+        Set<String> requiredClaims = new HashSet<>(Arrays.asList(
+                JWTClaimNames.SUBJECT,
+                JWTClaimNames.ISSUED_AT,
+                JWTClaimNames.EXPIRATION_TIME,
+                JWTClaimNames.JWT_ID,
+                CLAIM_LOCATION,
+                CLAIM_PROVIDER
+        ));
+
+
         //check that token is specifically an access token
         jwtProcessor.setJWSTypeVerifier(new DefaultJOSEObjectTypeVerifier<>(new JOSEObjectType("at+jwt")));
 
-        //required claims, add aud or scp to enforce scope
         jwtProcessor.setJWTClaimsSetVerifier(new DefaultJWTClaimsVerifier<>(
-                //the iss must be equal to Keycloaks realm URL
-                new JWTClaimsSet.Builder().issuer(EXPECTED_ISSUER).build(),
-                // token must include:
-                new HashSet<>(Arrays.asList(
-                        JWTClaimNames.SUBJECT,
-                        JWTClaimNames.ISSUED_AT,
-                        JWTClaimNames.EXPIRATION_TIME,
-                        JWTClaimNames.JWT_ID
-                ))
+                exactMatchClaims,
+                requiredClaims
         ));
 
     }
@@ -78,6 +89,7 @@ public class MyAuthenticator implements SimpleAuthenticator {
 
         if (connectPacket.getPassword().isEmpty()) {
             simpleAuthOutput.failAuthentication();
+            return;
         }
 
         try {
@@ -93,35 +105,31 @@ public class MyAuthenticator implements SimpleAuthenticator {
             SignedJWT signedJWT = SignedJWT.parse(jwtString);
             JWTClaimsSet claims = jwtProcessor.process(signedJWT, null);
 
+            String location = claims.getClaim(CLAIM_LOCATION).toString();
+            String provider = claims.getClaim(CLAIM_PROVIDER).toString();
 
-            Map<String, Object> realmAccess = (Map<String, Object>) claims.getClaim("realm_access");
+            List<String> allowedTopicsList = Optional.ofNullable((List<String>) claims.getClaim(CLAIM_ALLOWED_TOPICS)).orElse(List.of());
 
-
-            if (realmAccess == null) {
-                log.error("No realm-access claim found for client: {}", mqttClientId);
+            if (location == null || location.isBlank()) {
+                log.error("Missing location claim for {}", mqttClientId);
                 simpleAuthOutput.failAuthentication();
                 return;
             }
 
-            List<String> roles = (List<String>) realmAccess.get("roles");
-            log.info("Roles for {}: {} ", mqttClientId, roles);
-
-            if (roles == null || !realmAccess.containsKey("roles")) {
-                log.error("No roles assigned to {}", mqttClientId);
+            if (provider == null || provider.isBlank()) {
+                log.error("Missing provider claim for {}", mqttClientId);
                 simpleAuthOutput.failAuthentication();
                 return;
             }
 
-            if (!roles.contains("mqtt:connect")) {
-                log.error("Missing mqtt:connect role for {}", mqttClientId);
-                simpleAuthOutput.failAuthentication();
-                return;
-            }
 
-            //Storing the roles in the connection attribute store for later use in the authorizer
-            String rolesString = String.join(",", roles);
-            ByteBuffer rolesBuffer = ByteBuffer.wrap(rolesString.getBytes(StandardCharset.UTF_8));
-            simpleAuthInput.getConnectionInformation().getConnectionAttributeStore().put("roles", rolesBuffer);
+            //Store custom claims in the connection attribute store for later use in the authorizer
+            simpleAuthInput.getConnectionInformation().getConnectionAttributeStore().put(CLAIM_LOCATION, ByteBuffer.wrap(location.getBytes(StandardCharset.UTF_8)));
+            simpleAuthInput.getConnectionInformation().getConnectionAttributeStore().put(CLAIM_PROVIDER, ByteBuffer.wrap(provider.getBytes(StandardCharset.UTF_8)));
+
+            //Store allowed topics as comma separated string
+            String allowedTopics = String.join(",", allowedTopicsList);
+            simpleAuthInput.getConnectionInformation().getConnectionAttributeStore().put(CLAIM_ALLOWED_TOPICS, ByteBuffer.wrap(allowedTopics.getBytes(StandardCharset.UTF_8)));
 
 
             //token is valid
