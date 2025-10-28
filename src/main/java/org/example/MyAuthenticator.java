@@ -32,7 +32,7 @@ public class MyAuthenticator implements SimpleAuthenticator {
     private static final Logger log = LoggerFactory.getLogger(MyAuthenticator.class);
 
     //Only for testing
-    private static final String JWKS_URL = "http://localhost:8080/realms/smartocean-testrealm/protocol/openid-connect/certs";
+    private static final String JWKS_URL = "http://host.docker.internal:8080/realms/smartocean-testrealm/protocol/openid-connect/certs";
 
     //Only for testing
     private static final String EXPECTED_ISSUER = "http://localhost:8080/realms/smartocean-testrealm";
