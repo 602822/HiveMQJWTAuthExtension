@@ -73,8 +73,8 @@ public class MyAuthenticator implements SimpleAuthenticator {
         ));
 
 
-        //check that token is specifically an access token
-        jwtProcessor.setJWSTypeVerifier(new DefaultJOSEObjectTypeVerifier<>(new JOSEObjectType("at+jwt")));
+        //checks the type header of the JWT
+        jwtProcessor.setJWSTypeVerifier(new DefaultJOSEObjectTypeVerifier<>(new JOSEObjectType("JWT")));
 
         jwtProcessor.setJWTClaimsSetVerifier(new DefaultJWTClaimsVerifier<>(
                 exactMatchClaims,
