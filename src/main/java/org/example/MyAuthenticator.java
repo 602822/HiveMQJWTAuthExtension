@@ -60,7 +60,6 @@ public class MyAuthenticator implements SimpleAuthenticator {
 
         JWTClaimsSet exactMatchClaims = new JWTClaimsSet.Builder()
                 .issuer(EXPECTED_ISSUER)
-                .audience(EXPECTED_AUDIENCE)
                 .build();
 
         Set<String> requiredClaims = new HashSet<>(Arrays.asList(
@@ -122,6 +121,12 @@ public class MyAuthenticator implements SimpleAuthenticator {
                 return;
             }
 
+            List<String> tokenAudience = claims.getAudience();
+            if(tokenAudience == null || !tokenAudience.contains(EXPECTED_AUDIENCE)) {
+                log.error("Invalid audience claim for {}", mqttClientId);
+                simpleAuthOutput.failAuthentication();
+                return;
+            }
 
             //Store custom claims in the connection attribute store for later use in the authorizer
             simpleAuthInput.getConnectionInformation().getConnectionAttributeStore().put(CLAIM_LOCATION, ByteBuffer.wrap(location.getBytes(StandardCharset.UTF_8)));
