@@ -25,7 +25,6 @@ public class MyExtensionMain implements ExtensionMain {
             Services.securityRegistry().setAuthenticatorProvider(myAuthenticatorProvider);
             Services.securityRegistry().setAuthorizerProvider(myAuthorizerProvider);
 
-
             log.info("MyAuthenticatorProvider registered successfully.");
             log.info("MyAuthorizerProvider registered successfully.");
             log.info("Started: {}:{}", extensionInformation.getName(), extensionInformation.getVersion());
