@@ -15,13 +15,12 @@ public class MyAuthenticatorProvider implements AuthenticatorProvider {
         try {
             this.authenticator = new MyAuthenticator();
         } catch (MalformedURLException e) {
-            throw new RuntimeException("Failed to initialize authenticator",e);
+            throw new RuntimeException("Failed to initialize authenticator", e);
         }
     }
 
     @Override
     public @Nullable Authenticator getAuthenticator(@NotNull AuthenticatorProviderInput authenticatorProviderInput) {
-      // returns a shareable authenticator instance, must be thread-safe / state-less
         return authenticator;
     }
 }

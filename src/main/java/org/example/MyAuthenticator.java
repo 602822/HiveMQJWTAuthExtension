@@ -31,12 +31,13 @@ public class MyAuthenticator implements SimpleAuthenticator {
 
     private static final Logger log = LoggerFactory.getLogger(MyAuthenticator.class);
 
-    //Only for testing
+
+    //Json Web Key Set URL (where the JSON Web Keys are hosted)
+    //contains the public key that can be used to verify JWT signatures
     private static final String JWKS_URL = "http://host.docker.internal:8080/realms/smartocean-testrealm/protocol/openid-connect/certs";
 
-    //Only for testing
-    private static final String EXPECTED_ISSUER = "http://localhost:8080/realms/smartocean-testrealm";
 
+    private static final String EXPECTED_ISSUER = "http://localhost:8080/realms/smartocean-testrealm";
     private static final String CLAIM_LOCATION = "location";
     private static final String CLAIM_PROVIDER = "provider";
     private static final String CLAIM_ALLOWED_TOPICS = "allowed_topics";
@@ -50,11 +51,13 @@ public class MyAuthenticator implements SimpleAuthenticator {
     public MyAuthenticator() throws MalformedURLException {
         jwtProcessor = new DefaultJWTProcessor<>();
 
+        //used to verify the signature of JWTs
         JWKSource<SecurityContext> keySource = JWKSourceBuilder
                 .create(new URL(JWKS_URL))
                 .retrying(true)
                 .build();
 
+        //Selects the appropriate key from the keySource to verify the signature of the JWT
         JWSKeySelector<SecurityContext> keySelector = new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, keySource);
         jwtProcessor.setJWSKeySelector(keySelector);
 
@@ -71,7 +74,6 @@ public class MyAuthenticator implements SimpleAuthenticator {
                 CLAIM_PROVIDER
         ));
 
-
         //checks the type header of the JWT
         jwtProcessor.setJWSTypeVerifier(new DefaultJOSEObjectTypeVerifier<>(new JOSEObjectType("JWT")));
 
@@ -84,6 +86,8 @@ public class MyAuthenticator implements SimpleAuthenticator {
 
     @Override
     public void onConnect(@NotNull SimpleAuthInput simpleAuthInput, @NotNull SimpleAuthOutput simpleAuthOutput) {
+
+
         ConnectPacket connectPacket = simpleAuthInput.getConnectPacket();
 
         if (connectPacket.getPassword().isEmpty()) {
@@ -100,8 +104,9 @@ public class MyAuthenticator implements SimpleAuthenticator {
                     .decode(connectPacket.getPassword().get())
                     .toString();
 
-            //parse + validate jwt token
+            //parses the token, ensures the token is in a valid JWT format
             SignedJWT signedJWT = SignedJWT.parse(jwtString);
+            //verifies the signature, checks issuer, audience, expiration and required claims
             JWTClaimsSet claims = jwtProcessor.process(signedJWT, null);
 
             String location = claims.getClaim(CLAIM_LOCATION).toString();
@@ -122,7 +127,7 @@ public class MyAuthenticator implements SimpleAuthenticator {
             }
 
             List<String> tokenAudience = claims.getAudience();
-            if(tokenAudience == null || !tokenAudience.contains(EXPECTED_AUDIENCE)) {
+            if (tokenAudience == null || !tokenAudience.contains(EXPECTED_AUDIENCE)) {
                 log.error("Invalid audience claim for {}", mqttClientId);
                 simpleAuthOutput.failAuthentication();
                 return;

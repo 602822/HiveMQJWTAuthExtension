@@ -45,15 +45,6 @@ public class MyClientAuthorizer implements PublishAuthorizer, SubscriptionAuthor
             return;
         }
 
-        //check that topic match smartocean/{location}/{provider}/{clientId}/#
-        if (provider.isPresent() && location.isPresent()) {
-            if (topic.startsWith(String.format("smartocean/%s/%s/%s/", location.get(), provider.get(), clientId))) {
-                publishAuthorizerOutput.authorizeSuccessfully();
-                return;
-            }
-        }
-
-        //Additional topics that the sensor is allowed to publish to
         if (allowedTopicsString.isPresent()) {
             String[] allowedTopics = allowedTopicsString.get().split(",");
             for (String allowedTopic : allowedTopics) {
@@ -91,16 +82,6 @@ public class MyClientAuthorizer implements PublishAuthorizer, SubscriptionAuthor
             return;
         }
 
-        //users can subscribe to its location and provider topics
-        //check that topic match smartocean/{location}/{provider}/+/#
-        if (provider.isPresent() && location.isPresent()) {
-            if (topic.startsWith(String.format("smartocean/%s/%s", location.get(), provider.get()))) {
-                subscriptionAuthorizerOutput.authorizeSuccessfully();
-                return;
-            }
-        }
-
-        //Additional topics that the user can subscribe to
         if (allowedTopicsString.isPresent()) {
             String[] allowedTopics = allowedTopicsString.get().split(",");
             for (String allowedTopic : allowedTopics) {
