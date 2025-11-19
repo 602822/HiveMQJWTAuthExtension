@@ -16,7 +16,7 @@
  -->
 
 <hivemq-extension>
-    <id>smartocean-auth</id>
+    <id>${artifactId}</id>
     <version>${version}</version>
     <name>SmartOcean Authenticator</name>
     <author>Vebjørn Fjeldstad</author>

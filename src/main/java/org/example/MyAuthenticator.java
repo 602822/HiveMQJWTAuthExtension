@@ -36,10 +36,8 @@ public class MyAuthenticator implements SimpleAuthenticator {
     //contains the public key that can be used to verify JWT signatures
     private static final String JWKS_URL = "http://host.docker.internal:8080/realms/smartocean-testrealm/protocol/openid-connect/certs";
 
-
     private static final String EXPECTED_ISSUER = "http://localhost:8080/realms/smartocean-testrealm";
-    private static final String CLAIM_LOCATION = "location";
-    private static final String CLAIM_PROVIDER = "provider";
+
     private static final String CLAIM_ALLOWED_TOPICS = "allowed_topics";
 
     //who the token is intended/issued for
@@ -69,9 +67,7 @@ public class MyAuthenticator implements SimpleAuthenticator {
                 JWTClaimNames.SUBJECT,
                 JWTClaimNames.ISSUED_AT,
                 JWTClaimNames.EXPIRATION_TIME,
-                JWTClaimNames.JWT_ID,
-                CLAIM_LOCATION,
-                CLAIM_PROVIDER
+                JWTClaimNames.JWT_ID
         ));
 
         //checks the type header of the JWT
@@ -86,7 +82,6 @@ public class MyAuthenticator implements SimpleAuthenticator {
 
     @Override
     public void onConnect(@NotNull SimpleAuthInput simpleAuthInput, @NotNull SimpleAuthOutput simpleAuthOutput) {
-
 
         ConnectPacket connectPacket = simpleAuthInput.getConnectPacket();
 
@@ -109,22 +104,7 @@ public class MyAuthenticator implements SimpleAuthenticator {
             //verifies the signature, checks issuer, audience, expiration and required claims
             JWTClaimsSet claims = jwtProcessor.process(signedJWT, null);
 
-            String location = claims.getClaim(CLAIM_LOCATION).toString();
-            String provider = claims.getClaim(CLAIM_PROVIDER).toString();
-
             List<String> allowedTopicsList = Optional.ofNullable((List<String>) claims.getClaim(CLAIM_ALLOWED_TOPICS)).orElse(List.of());
-
-            if (location == null || location.isBlank()) {
-                log.error("Missing location claim for {}", mqttClientId);
-                simpleAuthOutput.failAuthentication();
-                return;
-            }
-
-            if (provider == null || provider.isBlank()) {
-                log.error("Missing provider claim for {}", mqttClientId);
-                simpleAuthOutput.failAuthentication();
-                return;
-            }
 
             List<String> tokenAudience = claims.getAudience();
             if (tokenAudience == null || !tokenAudience.contains(EXPECTED_AUDIENCE)) {
@@ -132,10 +112,6 @@ public class MyAuthenticator implements SimpleAuthenticator {
                 simpleAuthOutput.failAuthentication();
                 return;
             }
-
-            //Store custom claims in the connection attribute store for later use in the authorizer
-            simpleAuthInput.getConnectionInformation().getConnectionAttributeStore().put(CLAIM_LOCATION, ByteBuffer.wrap(location.getBytes(StandardCharset.UTF_8)));
-            simpleAuthInput.getConnectionInformation().getConnectionAttributeStore().put(CLAIM_PROVIDER, ByteBuffer.wrap(provider.getBytes(StandardCharset.UTF_8)));
 
             //Store allowed topics as comma separated string
             String allowedTopics = String.join(",", allowedTopicsList);

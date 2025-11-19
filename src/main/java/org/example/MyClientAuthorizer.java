@@ -8,6 +8,7 @@ import com.hivemq.extension.sdk.api.auth.parameter.PublishAuthorizerOutput;
 import com.hivemq.extension.sdk.api.auth.parameter.SubscriptionAuthorizerInput;
 import com.hivemq.extension.sdk.api.auth.parameter.SubscriptionAuthorizerOutput;
 import com.hivemq.extension.sdk.api.packets.publish.AckReasonCode;
+import com.hivemq.extension.sdk.api.packets.subscribe.SubackReasonCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,24 +27,11 @@ public class MyClientAuthorizer implements PublishAuthorizer, SubscriptionAuthor
         final String topic = publishAuthorizerInput.getPublishPacket().getTopic();
         log.info("Authorizing publish for clientId: {}, topic: {} ", clientId, topic);
 
-        Optional<String> location = getPublishClaim("location", publishAuthorizerInput);
-        Optional<String> provider = getPublishClaim("provider", publishAuthorizerInput);
-        Optional<String> allowedTopicsString = getPublishClaim("allowed_topics", publishAuthorizerInput);
 
-        log.info("Claims - location: {}, provider: {}, allowed_topics: {}", location.orElse("null"), provider.orElse("null"), allowedTopicsString.orElse("null"));
+        Optional<String> allowedTopicsString = getPublishClaim(publishAuthorizerInput);
 
+        log.info("allowed_topics: {}", allowedTopicsString.orElse("null"));
 
-        if (location.isEmpty()) {
-            log.error("Location is missing for clientId: {}", clientId);
-            publishAuthorizerOutput.failAuthorization();
-            return;
-        }
-
-        if (provider.isEmpty()) {
-            log.error("Provider is missing for clientId: {}", clientId);
-            publishAuthorizerOutput.failAuthorization();
-            return;
-        }
 
         if (allowedTopicsString.isPresent()) {
             String[] allowedTopics = allowedTopicsString.get().split(",");
@@ -66,21 +54,10 @@ public class MyClientAuthorizer implements PublishAuthorizer, SubscriptionAuthor
         final String clientId = subscriptionAuthorizerInput.getClientInformation().getClientId();
         final String topic = subscriptionAuthorizerInput.getSubscription().getTopicFilter();
         log.info("Authorizing subscribe for clientId: {}, topic: {} ", clientId, topic);
-        Optional<String> location = getSubscribeClaim("location", subscriptionAuthorizerInput);
-        Optional<String> provider = getSubscribeClaim("provider", subscriptionAuthorizerInput);
-        Optional<String> allowedTopicsString = getSubscribeClaim("allowed_topics", subscriptionAuthorizerInput);
-        log.info("Claims - location: {}, provider: {}, allowed_topics: {}", location.orElse("null"), provider.orElse("null"), allowedTopicsString.orElse("null"));
 
-        if (location.isEmpty()) {
-            log.error("Location is missing for clientId: {}", clientId);
-            subscriptionAuthorizerOutput.failAuthorization();
-            return;
-        }
-        if (provider.isEmpty()) {
-            log.error("Provider is missing for clientId: {}", clientId);
-            subscriptionAuthorizerOutput.failAuthorization();
-            return;
-        }
+        Optional<String> allowedTopicsString = getSubscribeClaim(subscriptionAuthorizerInput);
+        log.info("allowed_topics: {}", allowedTopicsString.orElse("null"));
+
 
         if (allowedTopicsString.isPresent()) {
             String[] allowedTopics = allowedTopicsString.get().split(",");
@@ -92,17 +69,20 @@ public class MyClientAuthorizer implements PublishAuthorizer, SubscriptionAuthor
             }
         }
 
+        log.error("Authorization failed for clientId: {}, topic: {}", clientId, topic);
+        subscriptionAuthorizerOutput.failAuthorization(SubackReasonCode.NOT_AUTHORIZED);
+
     }
 
-    Optional<String> getPublishClaim(String name, PublishAuthorizerInput publishAuthorizerInput) {
+    Optional<String> getPublishClaim(PublishAuthorizerInput publishAuthorizerInput) {
         var attributeStore = publishAuthorizerInput.getConnectionInformation().getConnectionAttributeStore();
-        Optional<ByteBuffer> buffer = attributeStore.get(name);
+        Optional<ByteBuffer> buffer = attributeStore.get("allowed_topics");
         return buffer.map(byteBuffer -> StandardCharsets.UTF_8.decode(byteBuffer).toString());
     }
 
-    Optional<String> getSubscribeClaim(String name, SubscriptionAuthorizerInput subscriptionAuthorizerInput) {
+    Optional<String> getSubscribeClaim(SubscriptionAuthorizerInput subscriptionAuthorizerInput) {
         var attributeStore = subscriptionAuthorizerInput.getConnectionInformation().getConnectionAttributeStore();
-        Optional<ByteBuffer> buffer = attributeStore.get(name);
+        Optional<ByteBuffer> buffer = attributeStore.get("allowed_topics");
         return buffer.map(byteBuffer -> StandardCharsets.UTF_8.decode(byteBuffer).toString());
     }
 
