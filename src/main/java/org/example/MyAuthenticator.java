@@ -99,12 +99,18 @@ public class MyAuthenticator implements SimpleAuthenticator {
                     .decode(connectPacket.getPassword().get())
                     .toString();
 
+            System.out.println("jwt String: " + jwtString);
+
             //parses the token, ensures the token is in a valid JWT format
             SignedJWT signedJWT = SignedJWT.parse(jwtString);
             //verifies the signature, checks issuer, audience, expiration and required claims
             JWTClaimsSet claims = jwtProcessor.process(signedJWT, null);
 
-            List<String> allowedTopicsList = Optional.ofNullable((List<String>) claims.getClaim(CLAIM_ALLOWED_TOPICS)).orElse(List.of());
+
+            System.out.println("JWT: " + signedJWT);
+
+
+             List<String> allowedTopicsList = Optional.ofNullable((List<String>) claims.getClaim(CLAIM_ALLOWED_TOPICS)).orElse(List.of());
 
             List<String> tokenAudience = claims.getAudience();
             if (tokenAudience == null || !tokenAudience.contains(EXPECTED_AUDIENCE)) {
