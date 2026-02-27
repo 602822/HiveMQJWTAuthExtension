@@ -34,9 +34,9 @@ public class MyAuthenticator implements SimpleAuthenticator {
 
     //Json Web Key Set URL (where the JSON Web Keys are hosted)
     //contains the public key that can be used to verify JWT signatures
-    private static final String JWKS_URL = "http://host.docker.internal:8080/realms/smartocean-testrealm/protocol/openid-connect/certs";
+    private static final String JWKS_URL = "http://158.39.77.107:8081/realms/smartocean-testrealm/protocol/openid-connect/certs";
 
-    private static final String EXPECTED_ISSUER = "http://localhost:8080/realms/smartocean-testrealm";
+    private static final String EXPECTED_ISSUER = "http://158.39.77.107:8081/realms/smartocean-testrealm";
 
     private static final String CLAIM_ALLOWED_TOPICS = "allowed_topics";
 
