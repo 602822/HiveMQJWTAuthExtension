@@ -1,59 +1,104 @@
-:hivemq-link: http://www.hivemq.com
-:hivemq-extension-docs-link: http://www.hivemq.com/docs/extensions/latest/
-:hivemq-extension-docs-archetype-link: http://www.hivemq.com/docs/extensions/latest/#maven-archetype-chapter
-:hivemq-blog-tools: http://www.hivemq.com/mqtt-toolbox
-:maven-documentation-profile-link: http://maven.apache.org/guides/introduction/introduction-to-profiles.html
-:hivemq-support: http://www.hivemq.com/support/
-:hivemq-testcontainer: https://github.com/hivemq/hivemq-testcontainer
-:hivemq-mqtt-client: https://github.com/hivemq/hivemq-mqtt-client
 
-== HiveMQ 4 Hello World Extension
+== HiveMQ Authentication and Authroization Extension
 
-*Type*: Demonstration Extension
+== MyAuthenticator
+The MyAuthenticator class contains the authentication logic
 
-*Version*: 4.6.2
+The JWKS url needs to be modified according to where keycloak is running and what your realm is. My keycloak is running on a virtual machine on port 8081 and my keycloak realm is called smartocean-testrealm, so that is why the value is: "http://158.39.77.107:8081/realms/smartocean-testrealm/protocol/openid-connect/certs";
 
-*License*: Apache License Version 2.0
+The same applies to the EXPECTED_ISSUER variable
 
-=== Purpose
+The Authenticator expects the JWT token (for a client) to contain a claim of type Audience with the value: hivemq-smartocean-testbroker, this can be modified by changing the EXPECTED_AUDIENCE variable
 
-This Hello World extension sets a ClientLifecycleEventListener which logs
-the MQTT Version and identifier of every connecting and disconnecting client and
-registers a PublishInboundInterceptor to modify the payload of every Publish with the topic 'hello/world' to 'Hello World!'.
+All the clients needs a allowed_topics claim that contains the topics a client is authorized to publish or subscribe to. The allowed_topics claim is added to the client in Keycloak and is of type Hardcoded claim, the value is a comma separated list of topics, for example: ["smartocean/weather1, smartocean, weather2"]. It supports both the + and # wildcards, for example: ["smartocean/+/temperature] or ["smartocean/#"].
 
-There is {hivemq-extension-docs-archetype-link}[a Maven Archetype available]
-to generate a basic extension from the IDE.
+MyAuthenticator expects the JWT token to be sent in the password field in the MQTT CONNECT message, for example:
+connOpts.setUserName(clientId);
+connOpts.setPassword(jwtToken.toCharArray());
+if the password field is empty the authentication will fail.
 
-We strongly recommend to read the {hivemq-extension-docs-link}[HiveMQ Extension Documentation]
-to grasp the core concepts of HiveMQ extension development.
+== MyClientAuthorizer
+Checks each topic in the allowed_topics claim of the client and if the topic matches the topic in the MQTT PUBLISH or SUBSCRIBE message, then the client is authorized to publish or subscribe to that topic. If there is no match, then the client is not authorized to publish or subscribe to that topic.
 
-=== Installation
+== MyExtensionMain
+Starts and stops the extension, it registers the MyAuthenticator and MyClientAuthorizer in the extension start method and unregisters them in the stop method.
 
-. Clone this repository into a Java 11 maven project.
-. Run `mvn package` goal from Maven to build the extension.
-. Move the file: "target/hivemq-hello-world-extension-4.6.2-distribution.zip" to the directory: "HIVEMQ_HOME/extensions"
-. Unzip the file.
-. Start HiveMQ.
+== MyAuthenticatorProvider
+The MyAuthenticatorProvider is used to create an instance of the MyAuthenticator class, it is registered in the MyExtensionMain class.
 
-=== First Steps
+== MyClientAuthorizerProvider
+The MyClientAuthorizerProvider is used to create an instance of the MyClientAuthorizer class, it is registered in the MyExtensionMain class.
 
-==== Manual Testing
+== Setup (Just used for the tests)
+in the root of the project, I created a config.properties file, it contains all the clientID and clientSecrets used for client credential flow.
 
-Connect with an {hivemq-blog-tools}[MQTT client] of your choice. You should see a log message with its identifier and MQTT version.
+In this repository the config.properties file is just used in the HiveMQAuthTets to test authentication and authorization using both client credential flow and authorization code flow with PKCE.
 
-==== Automatic Testing
+The REDIRECT_URI needs to be specified here when using authroization code flow with PKCE for authentication.
 
-Execute the `HelloWorldInterceptorIT` for automatic testing of the extension.
-It uses the {hivemq-testcontainer}[HiveMQ Testcontainer] to automatically package, deploy and run the extension inside a HiveMQ docker container.
-The test creates a {hivemq-mqtt-client}[HiveMQ MQTT Client] to publish and receive a message with the topic 'hello/world'.
-It checks whether the payload has been changed correctly to 'Hello World!'.
+These values are loaded in the HiveMQAuthTests using the config loader
 
-=== Next steps
+examples:
+Properties props = ConfigLoader.load();
 
-Awesome, you got your first HiveMQ 4 extension working.
+String s1ClientId = props.getProperty("S1CLIENTID");
+String s1ClientSecret = props.getProperty("S1CLIENTSECRET");
 
-Now read the {hivemq-extension-docs-link}[HiveMQ Extension Documentation] to see what extensions can do.
+String clientId = props.getProperty("CLIENT_ID");
+String redirectUri = props.getProperty("REDIRECT_URI");
 
-=== Need help?
 
-If you encounter any problems, we are happy to help. The best place to get in contact is our {hivemq-support}[support].
+
+Example config.properties file:
+S1CLIENTID=sensor-1
+S1CLIENTSECRET=VDno4ZQ6TTIlKyhe4KvGqFS7PKcGTFvb
+S2CLIENTID=sensor-2
+S2CLIENTSECRET=fR7oYedWdKckidUpvVwJxrvbEUcW6qMF
+S4CLIENTID=sensor-4
+S4CLIENTSECRET=2OY2wvWdi4xIifMs0w8wfqdEbAAzFAjc
+CLIENT_ID=MQTT-user-client
+REDIRECT_URI=http://localhost:8081/callback
+
+
+The Config class contains the Realm and Base URL
+final static String KEYCLOAK_REALM = "smartocean-testrealm";
+final static String BASE_URL = "http://158.39.77.107:8081";
+
+== Installation
+Clone the repo into a Java 17 maven project
+
+Run mvn clean package to build the extension
+
+It builds a zip file in the target folder, for example:
+C:\Users\vefje\IdeaProjects\HiveMQJWTAuthExtension1\target\HiveMQJWTAuthExtension1-1.0-SNAPSHOT-distribution.zip
+
+go to: C:\Users\vefje\IdeaProjects\HiveMQJWTAuthExtension1\target
+
+unzip the HiveMQJWTAuthExtension1-1.0-SNAPSHOT-distribution.zip
+
+Attach the extension to HiveMQ using a volume mount
+
+Running it locally example:
+docker run -d --name hivemq ^
+-p 8082:8080 ^
+-p 1883:1883 ^
+-p 9399:9399 ^
+-e HIVEMQ_ALLOW_ALL_CLIENTS=false ^
+-v "C:\Users\vefje\IdeaProjects\HiveMQJWTAuthExtension1\target\HiveMQJWTAuthExtension1-1.0-SNAPSHOT-distribution\HiveMQJWTAuthExtension1:/opt/hivemq/extensions/HiveMQJWTAuthExtension1"
+
+Virtual machine example:
+ubuntu@smartocean:~$ docker run -d --name hivemq \
+-p 8082:8080 \
+-p 1883:1883 \
+-p 9399:9399 \
+-e HIVEMQ_ALLOW_ALL_CLIENTS=false \
+-v /home/ubuntu/extensions/HiveMQJWTAuthExtension1:/opt/hivemq/extensions/HiveMQJWTAuthExtension1
+
+
+
+
+
+
+
+
+
